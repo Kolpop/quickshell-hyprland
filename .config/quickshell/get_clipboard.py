@@ -7,10 +7,8 @@ import re
 import subprocess
 import sys
 
-THUMB_DIR = os.path.join(
-    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
-    "quickshell", "clipboard-thumbnails",
-)
+# Keep the existing path because QML components reference it directly.
+THUMB_DIR = os.environ.get("QS_CLIP_THUMB_DIR", "/tmp/qs_clip_thumbs")
 os.makedirs(THUMB_DIR, mode=0o700, exist_ok=True)
 BINARY_PATTERN = re.compile(
     r"^\[\[ binary data ([\d.]+\s*\w+)\s+(\w+)(?:\s+(\d+x\d+))? \]\]"
