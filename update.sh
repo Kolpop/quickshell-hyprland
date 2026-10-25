@@ -3,7 +3,13 @@
 #  QUICKSHELL MATERIAL YOU AUTO-UPDATER
 #  GitHub: https://github.com/StopNope/quickshell-hyprland
 # =============================================================================
-set -e
+set -Eeuo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell"
+mkdir -p "$STATE_DIR"
+LOG_FILE="$STATE_DIR/updater.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+trap 'status=$?; printf "[%s] ERROR: updater failed at line %s (exit %s)\\n" "$(date --iso-8601=seconds)" "$LINENO" "$status" >&2; exit "$status"' ERR
 
 REPO_URL="https://github.com/StopNope/quickshell-hyprland.git"
 
@@ -48,6 +54,14 @@ else
 fi
 
 cd "${REPO_DIR}"
+
+# Never overwrite uncommitted work or attempt an implicit merge during update.
+if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+    err "В репозитории есть локальные изменения. Сначала сохраните их в коммит или уберите в stash."
+    err "Логи обновления: ${LOG_FILE}"
+    exit 1
+fi
+
 log "Проверка обновлений в репозитории (${REPO_DIR})..."
 git fetch origin main --quiet
 
@@ -66,7 +80,7 @@ if [[ "$LOCAL_HASH" == "$REMOTE_HASH" && $FORCE_UPDATE -eq 0 ]]; then
 fi
 
 log "Загрузка новых обновлений из GitHub..."
-git pull origin main --quiet
+git pull --ff-only origin main --quiet
 ok "Репозиторий успешно обновлен!"
 
 # 2. Обновление шрифтов
