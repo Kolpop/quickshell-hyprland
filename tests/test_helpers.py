@@ -25,9 +25,12 @@ class WeatherIconTests(unittest.TestCase):
     def test_unknown_description_has_cloud_icon(self):
         self.assertEqual(weather.get_icon("Нет данных"), "󰖐")
 
-    @patch("qs_weather.urllib.request.urlopen", side_effect=TimeoutError("test timeout"))
-    def test_weather_failure_does_not_fabricate_conditions(self, _urlopen):
-        self.assertIsNone(weather.get_weather("test-city"))
+    def test_weather_failure_does_not_fabricate_conditions(self):
+        with patch.object(
+            weather.urllib.request, "urlopen",
+            side_effect=TimeoutError("test timeout"),
+        ):
+            self.assertIsNone(weather.get_weather("test-city"))
 
 
 if __name__ == "__main__":
