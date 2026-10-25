@@ -1,6 +1,4 @@
-# 📱 Quickshell Material You (Pixel Style) for Hyprland
-
-> Полноценное рабочее окружение в эстетике **Google Pixel / Material You (Material 3 / Android 15)** для Hyprland на базе реактивного движка **Quickshell**.
+# 📱 Quickshell for Hyprland
 
 ---
 
