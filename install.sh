@@ -4,7 +4,15 @@
 #  Installer & Configurator
 #  GitHub: https://github.com/StopNope/quickshell-hyprland
 # =============================================================================
-set -e
+set -Eeuo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell"
+mkdir -p "$STATE_DIR"
+LOG_FILE="$STATE_DIR/installer.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+trap 'status=$?; printf "[%s] ERROR: installer failed at line %s (exit %s)\\n" "$(date --iso-8601=seconds)" "$LINENO" "$status" >&2; exit "$status"' ERR
+
+USER_CONFIG_BACKUP=""
 
 REPO_URL="https://github.com/StopNope/quickshell-hyprland.git"
 INSTALL_DIR="${HOME}/.config/quickshell"
@@ -72,7 +80,9 @@ EOF
 )
 
     # Формируем полный блок интеграции Quickshell
-    cat << 'EOF' > /tmp/qs_hypr_block.lua
+    local block_file
+    block_file="$(mktemp "${TMPDIR:-/tmp}/qs_hypr_block.XXXXXX.lua")"
+    cat << 'EOF' > "$block_file"
 
 -- >>> quickshell-integration (auto-installed) START
 -- =============================================================================
@@ -155,8 +165,8 @@ hl.bind(qs_mod .. " + ALT + mouse_down", hl.dsp.exec_cmd("python3 " .. os.getenv
 EOF
 
     echo "$clean_content" > "$hypr_lua"
-    cat /tmp/qs_hypr_block.lua >> "$hypr_lua"
-    rm -f /tmp/qs_hypr_block.lua
+    cat "$block_file" >> "$hypr_lua"
+    rm -f "$block_file"
     ok "Блок интеграции Quickshell успешно внедрен в конец hyprland.lua!"
 }
 
@@ -230,7 +240,8 @@ mkdir -p "$HOME/.config"
 
 if [[ -d "$HOME/.config/quickshell" ]]; then
     if [[ -f "$HOME/.config/quickshell/config.json" ]]; then
-        cp "$HOME/.config/quickshell/config.json" /tmp/qs_config_user.json 2>/dev/null || true
+        USER_CONFIG_BACKUP="$(mktemp "${TMPDIR:-/tmp}/qs_config_user.XXXXXX.json")"
+        cp "$HOME/.config/quickshell/config.json" "$USER_CONFIG_BACKUP"
     fi
     BACKUP_QS="$HOME/.config/quickshell.bak.$(date +%Y%m%d%H%M%S)"
     mv "$HOME/.config/quickshell" "$BACKUP_QS"
@@ -241,8 +252,9 @@ mkdir -p "$HOME/.config/quickshell"
 cp -r "${SOURCE_DIR}/.config/quickshell/"* "$HOME/.config/quickshell/"
 
 # Если у пользователя был сохраненный config.json, возвращаем его
-if [[ -f /tmp/qs_config_user.json ]]; then
-    mv /tmp/qs_config_user.json "$HOME/.config/quickshell/config.json"
+if [[ -n "$USER_CONFIG_BACKUP" && -f "$USER_CONFIG_BACKUP" ]]; then
+    mv "$USER_CONFIG_BACKUP" "$HOME/.config/quickshell/config.json"
+    USER_CONFIG_BACKUP=""
     ok "Пользовательские настройки и темы (config.json) бережно сохранены."
 fi
 

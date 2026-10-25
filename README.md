@@ -32,6 +32,35 @@ quickshell-update
 
 ---
 
+## 🧰 Диагностика и логи
+
+Установщик и обновлятор сохраняют вывод в пользовательском каталоге состояния:
+
+- Установщик: `~/.local/state/quickshell/installer.log`
+- Обновлятор: `~/.local/state/quickshell/updater.log`
+
+Смотреть лог обновлятора в реальном времени:
+
+```bash
+tail -F "${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/updater.log"
+```
+
+Для ручного запуска Quickshell с подробными сообщениями:
+
+```bash
+qs -vv --log-times 2>&1 | tee "${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/runtime.log"
+```
+
+Ошибки пользовательских служб можно смотреть через systemd:
+
+```bash
+journalctl --user -b -p warning --no-pager
+```
+
+Обновлятор останавливается, если в клонированном Git-репозитории есть незакоммиченные изменения, и использует только fast-forward обновление. Сначала сохраните изменения в коммит или stash, затем повторите команду.
+
+---
+
 ## ✨ Возможности
 
 * **Dynamic Top Bar**:
