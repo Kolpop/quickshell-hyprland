@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# Backups and temporary files
+*.bak
+*.bak.*
+.backup_archive/
+*.swp
+*~
+.DS_Store
+
+# Logs
+*.log
+*.qslog
+/tmp/
+
+# Sensitive
+.git-credentials
