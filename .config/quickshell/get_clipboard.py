@@ -1,114 +1,134 @@
 #!/usr/bin/env python3
-import sys
+"""JSON helper for the cliphist-backed Quickshell clipboard UI."""
+
+import json
 import os
 import re
 import subprocess
-import json
+import sys
 
-THUMB_DIR = '/tmp/qs_clip_thumbs'
-os.makedirs(THUMB_DIR, exist_ok=True)
+THUMB_DIR = os.path.join(
+    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
+    "quickshell", "clipboard-thumbnails",
+)
+os.makedirs(THUMB_DIR, mode=0o700, exist_ok=True)
+BINARY_PATTERN = re.compile(
+    r"^\[\[ binary data ([\d.]+\s*\w+)\s+(\w+)(?:\s+(\d+x\d+))? \]\]"
+)
+VALID_IMAGE_FORMATS = {"png", "jpg", "jpeg", "webp"}
+
+
+def run(args, **kwargs):
+    """Run a helper command with a timeout and consistent error reporting."""
+    return subprocess.run(args, timeout=5, **kwargs)
+
 
 def get_items(limit=70):
     try:
-        proc = subprocess.run(
-            ['cliphist', '-preview-width', '400', 'list'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True
+        proc = run(
+            ["cliphist", "-preview-width", "400", "list"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True,
         )
-        lines = proc.stdout.splitlines()
-    except Exception:
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"clipboard: unable to read cliphist: {exc}", file=sys.stderr)
         return []
 
     items = []
-    re_binary = re.compile(r"^\[\[ binary data ([\d\.]+\s*\w+)\s+(\w+)(?:\s+(\d+x\d+))? \]\]")
-
-    for line in lines[:limit]:
-        if not line or '\t' not in line:
+    for line in proc.stdout.splitlines()[:max(0, limit)]:
+        if not line or "\t" not in line:
             continue
-        parts = line.split('\t', 1)
-        item_id = parts[0].strip()
-        content = parts[1] if len(parts) > 1 else ""
+        item_id, content = line.split("\t", 1)
+        item_id = item_id.strip()
+        if not item_id.isdecimal():
+            continue
 
-        bin_match = re_binary.match(content)
-        if bin_match:
-            size_str = bin_match.group(1)
-            fmt = bin_match.group(2)
-            dims = bin_match.group(3) or ""
-            img_path = os.path.join(THUMB_DIR, f"{item_id}.{fmt}")
-
-            if not os.path.exists(img_path) or os.path.getsize(img_path) == 0:
+        match = BINARY_PATTERN.match(content)
+        if match:
+            size_str, image_format, dimensions = match.groups()
+            image_format = image_format.lower()
+            image_path = ""
+            if image_format in VALID_IMAGE_FORMATS:
+                candidate = os.path.join(THUMB_DIR, f"{item_id}.{image_format}")
                 try:
-                    with open(img_path, 'wb') as f:
-                        subprocess.run(['cliphist', 'decode', item_id], stdout=f, check=True, timeout=2)
-                except Exception:
-                    img_path = ""
-
+                    if not os.path.isfile(candidate) or os.path.getsize(candidate) == 0:
+                        with open(candidate, "wb") as output:
+                            run(
+                                ["cliphist", "decode", item_id], stdout=output,
+                                stderr=subprocess.PIPE, check=True,
+                            )
+                    image_path = candidate
+                except (OSError, subprocess.SubprocessError) as exc:
+                    print(f"clipboard: failed to decode item {item_id}: {exc}", file=sys.stderr)
             items.append({
-                "id": item_id,
-                "type": "image",
-                "preview": f"Screenshot ({dims or size_str})",
-                "imagePath": img_path,
-                "size": size_str,
-                "dims": dims,
-                "rawLine": line
+                "id": item_id, "type": "image",
+                "preview": f"Screenshot ({dimensions or size_str})",
+                "imagePath": image_path, "size": size_str,
+                "dims": dimensions or "", "rawLine": line,
             })
         else:
-            # Text item
-            clean_text = content.replace('\t', ' ').strip()
-            if not clean_text:
-                continue
-            items.append({
-                "id": item_id,
-                "type": "text",
-                "preview": clean_text,
-                "imagePath": "",
-                "size": f"{len(clean_text)} chars",
-                "dims": "",
-                "rawLine": line
-            })
-
+            text_preview = content.replace("\t", " ").strip()
+            if text_preview:
+                items.append({
+                    "id": item_id, "type": "text", "preview": text_preview,
+                    "imagePath": "", "size": f"{len(text_preview)} chars",
+                    "dims": "", "rawLine": line,
+                })
     return items
 
-def main():
-    if len(sys.argv) > 2 and sys.argv[1] == '--copy':
-        item_id = sys.argv[2]
-        cmd = f"cliphist decode {item_id} | wl-copy"
-        subprocess.run(cmd, shell=True)
-        return
 
-    if len(sys.argv) > 2 and sys.argv[1] == '--delete':
-        item_id = sys.argv[2]
+def main(argv=None):
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) > 1 and args[0] in {"--copy", "--delete"}:
+        item_id = args[1]
+        if not item_id.isdecimal():
+            print("clipboard: invalid item id", file=sys.stderr)
+            return 2
         try:
-            p_list = subprocess.run(['cliphist', 'list'], stdout=subprocess.PIPE, text=True)
-            for l in p_list.stdout.splitlines():
-                if l.startswith(item_id + '\t'):
-                    subprocess.run(['cliphist', 'delete'], input=l + '\n', text=True)
-                    break
-            # Remove cached thumb if exists
-            for ext in ['png', 'jpg', 'jpeg', 'webp']:
-                p = os.path.join(THUMB_DIR, f"{item_id}.{ext}")
-                if os.path.exists(p):
+            if args[0] == "--copy":
+                decoded = run(
+                    ["cliphist", "decode", item_id], stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, check=True,
+                )
+                run(["wl-copy"], input=decoded.stdout, check=True)
+            else:
+                listing = run(
+                    ["cliphist", "list"], stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True, check=True,
+                )
+                entry = next(
+                    (line for line in listing.stdout.splitlines()
+                     if line.startswith(item_id + "\t")), None
+                )
+                if entry:
+                    run(
+                        ["cliphist", "delete"], input=entry + "\n",
+                        text=True, check=True,
+                    )
+                for ext in VALID_IMAGE_FORMATS:
                     try:
-                        os.remove(p)
-                    except Exception:
+                        os.remove(os.path.join(THUMB_DIR, f"{item_id}.{ext}"))
+                    except FileNotFoundError:
                         pass
-        except Exception:
-            pass
-        return
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f"clipboard: {args[0][2:]} failed: {exc}", file=sys.stderr)
+            return 1
+        return 0
 
-    if len(sys.argv) > 1 and sys.argv[1] == '--clear':
-        subprocess.run(['cliphist', 'wipe'])
+    if args and args[0] == "--clear":
         try:
-            for f in os.listdir(THUMB_DIR):
-                os.remove(os.path.join(THUMB_DIR, f))
-        except Exception:
-            pass
-        return
+            run(["cliphist", "wipe"], check=True)
+            for name in os.listdir(THUMB_DIR):
+                path = os.path.join(THUMB_DIR, name)
+                if os.path.isfile(path):
+                    os.remove(path)
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f"clipboard: clear failed: {exc}", file=sys.stderr)
+            return 1
+        return 0
 
-    items = get_items(70)
-    print(json.dumps(items, ensure_ascii=False))
+    print(json.dumps(get_items(70), ensure_ascii=False))
+    return 0
 
-if __name__ == '__main__':
-    main()
+
+if __name__ == "__main__":
+    raise SystemExit(main())
