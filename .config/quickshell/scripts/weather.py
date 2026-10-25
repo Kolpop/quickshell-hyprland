@@ -1,85 +1,109 @@
-#!/usr/bin/env bash
 #!/usr/bin/env python3
-import sys
+"""Return current weather as JSON for the Quickshell widgets.
+
+The output keys (city, temp, desc, icon) are kept stable for existing QML
+consumers. Network failures are reported on stderr and represented as missing
+weather data instead of fabricated temperature/conditions.
+"""
+
 import json
-import urllib.request
+import sys
+import urllib.error
 import urllib.parse
+import urllib.request
+
+USER_AGENT = "quickshell-hyprland/1.0"
+REQUEST_TIMEOUT = 5
+UNKNOWN_TEMP = "—"
+UNKNOWN_DESC = "Нет данных"
+
+
+def _read_json(url):
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
+        return json.loads(response.read().decode("utf-8"))
+
 
 def get_location():
+    """Return a detected city, or None when geolocation is unavailable."""
     try:
-        req = urllib.request.Request("http://ip-api.com/json/?lang=ru", headers={"User-Agent": "curl/7.68.0"})
-        with urllib.request.urlopen(req, timeout=3) as res:
-            data = json.loads(res.read().decode())
-            if data.get("status") == "success":
-                city_ru = data.get("city")
-                if city_ru:
-                    return city_ru
-    except Exception:
-        pass
+        data = _read_json("http://ip-api.com/json/?fields=status,city&lang=ru")
+        city = data.get("city")
+        if data.get("status") == "success" and isinstance(city, str) and city.strip():
+            return city.strip()
+    except (OSError, ValueError, urllib.error.URLError, TimeoutError) as exc:
+        print(f"weather: geolocation unavailable: {exc}", file=sys.stderr)
     return None
 
+
 def get_icon(desc):
-    d = (desc or "").lower()
-    if any(w in d for w in ["ясно", "солнечн", "clear", "sunny"]):
-        return "󰖙"
-    if any(w in d for w in ["гроз", "молни", "thunder"]):
+    description = (desc or "").lower()
+    if any(word in description for word in ("гроз", "молни", "thunder")):
         return "󰖓"
-    if any(w in d for w in ["снег", "метел", "буран", "snow"]):
+    if any(word in description for word in ("снег", "метел", "буран", "snow")):
         return "󰖘"
-    if any(w in d for w in ["дожд", "ливен", "морос", "rain", "drizzle", "shower"]):
+    if any(word in description for word in ("дожд", "ливен", "морос", "rain", "drizzle", "shower")):
         return "󰖗"
-    if any(w in d for w in ["туман", "мгла", "дым", "fog", "mist", "haze"]):
+    if any(word in description for word in ("туман", "мгла", "дым", "fog", "mist", "haze")):
         return "󰖑"
-    if any(w in d for w in ["перемен", "част", "partly"]):
+    if any(word in description for word in ("перемен", "част", "partly")):
         return "󰖕"
-    if any(w in d for w in ["облачн", "пасмурн", "overcast", "cloudy"]):
+    if any(word in description for word in ("облачн", "пасмурн", "overcast", "cloudy")):
         return "󰖐"
+    if any(word in description for word in ("ясно", "солнечн", "clear", "sunny")):
+        return "󰖙"
     return "󰖐"
 
-def main():
-    city = None
-    force_auto = False
 
-    args = sys.argv[1:]
-    if "--auto" in args:
-        force_auto = True
-    for i, a in enumerate(args):
-        if a == "--city" and i + 1 < len(args):
-            city = args[i + 1].strip()
-
-    if force_auto or not city or city.lower() in ["", "auto", "авто"]:
-        detected = get_location()
-        if detected:
-            city = detected
-        else:
-            city = "Тюмень"
-
-    # Запрос погоды через wttr.in
-    temp = "+8°C"
-    desc = "Ясно"
+def get_weather(city):
+    """Fetch weather for city; return None if the service response is invalid."""
+    encoded_city = urllib.parse.quote(city, safe="")
+    url = f"https://wttr.in/{encoded_city}?format=%t|%C&lang=ru"
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        encoded_city = urllib.parse.quote(city)
-        url = f"https://wttr.in/{encoded_city}?format=%t|%C&lang=ru"
-        req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
-        with urllib.request.urlopen(req, timeout=4) as res:
-            raw = res.read().decode("utf-8", errors="ignore").strip()
-            if "|" in raw:
-                parts = raw.split("|", 1)
-                t = parts[0].strip().replace("+", "")
-                if t and not t.startswith("-") and not t.startswith("+"):
-                    t = "+" + t
-                temp = t
-                desc = parts[1].strip()
-    except Exception:
-        pass
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
+            raw = response.read().decode("utf-8", errors="replace").strip()
+        if "|" not in raw:
+            raise ValueError("unexpected response format")
+        temperature, description = (part.strip() for part in raw.split("|", 1))
+        if not temperature or not description or "unknown location" in description.lower():
+            raise ValueError("weather service returned no usable data")
+        return temperature, description
+    except (OSError, ValueError, urllib.error.URLError, TimeoutError) as exc:
+        print(f"weather: failed to fetch weather for {city!r}: {exc}", file=sys.stderr)
+        return None
 
-    out = {
+
+def main(argv=None):
+    args = sys.argv[1:] if argv is None else argv
+    city = None
+    force_auto = "--auto" in args
+    for index, argument in enumerate(args):
+        if argument == "--city" and index + 1 < len(args):
+            candidate = args[index + 1].strip()
+            if candidate and candidate.lower() not in ("auto", "авто"):
+                city = candidate
+
+    if force_auto or city is None:
+        city = get_location() or "Неизвестно"
+
+    weather = get_weather(city) if city != "Неизвестно" else None
+    if weather is None and city == "Неизвестно":
+        # Avoid making a second request with a made-up city.
+        temperature, description = UNKNOWN_TEMP, UNKNOWN_DESC
+    elif weather is None:
+        temperature, description = UNKNOWN_TEMP, UNKNOWN_DESC
+    else:
+        temperature, description = weather
+
+    print(json.dumps({
         "city": city,
-        "temp": temp,
-        "desc": desc,
-        "icon": get_icon(desc)
-    }
-    print(json.dumps(out, ensure_ascii=False))
+        "temp": temperature,
+        "desc": description,
+        "icon": get_icon(description),
+        "available": weather is not None,
+    }, ensure_ascii=False))
+
 
 if __name__ == "__main__":
     main()
