@@ -3,6 +3,7 @@
 import importlib.util
 import pathlib
 import unittest
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WEATHER_PATH = ROOT / ".config" / "quickshell" / "scripts" / "weather.py"
@@ -24,8 +25,9 @@ class WeatherIconTests(unittest.TestCase):
     def test_unknown_description_has_cloud_icon(self):
         self.assertEqual(weather.get_icon("Нет данных"), "󰖐")
 
-    def test_weather_failure_does_not_fabricate_conditions(self):
-        self.assertIsNone(weather.get_weather("this-city-should-not-exist-qs-test-928173"))
+    @patch("qs_weather.urllib.request.urlopen", side_effect=TimeoutError("test timeout"))
+    def test_weather_failure_does_not_fabricate_conditions(self, _urlopen):
+        self.assertIsNone(weather.get_weather("test-city"))
 
 
 if __name__ == "__main__":
