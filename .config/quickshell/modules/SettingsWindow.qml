@@ -3267,6 +3267,7 @@ Rectangle {
                                     Rectangle { Layout.fillWidth: true; height: 1; color: root.cfg.borderCol; Layout.leftMargin: 14; Layout.rightMargin: 14 }
 
                                     // Город погоды
+                                    // 1. Автоопределение местоположения по IP
                                     Item {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 46
@@ -3276,13 +3277,128 @@ Rectangle {
                                             anchors.leftMargin: 16
                                             anchors.rightMargin: 14
 
-                                            Text { text: "Город прогноза:"; color: root.cfg.textPrimary; font.pixelSize: 12; font.bold: true; Layout.preferredWidth: 160 }
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 1
+                                                Text {
+                                                    text: "Автоопределение города (по IP)"
+                                                    color: root.cfg.textPrimary
+                                                    font.pixelSize: 12
+                                                    font.bold: true
+                                                    font.family: root.cfg.fontFamily
+                                                }
+                                                Text {
+                                                    text: root.cfg.weatherAutoLocation ? ("Геолокация активна: " + root.cfg.weatherCity) : "Ручной ввод города"
+                                                    color: root.cfg.textMuted
+                                                    font.pixelSize: 10
+                                                    font.family: root.cfg.fontFamily
+                                                }
+                                            }
 
+                                            // Переключатель автоопределения
+                                            Rectangle {
+                                                width: 42; height: 24; radius: 12
+                                                color: root.cfg.weatherAutoLocation ? root.cfg.accent : root.cfg.bgSurface
+                                                border.color: root.cfg.borderCol; border.width: 1
+                                                Rectangle {
+                                                    width: 18; height: 18; radius: 9
+                                                    color: root.cfg.weatherAutoLocation ? root.cfg.accentText : root.cfg.textMuted
+                                                    x: root.cfg.weatherAutoLocation ? 21 : 3
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    Behavior on x { NumberAnimation { duration: 140 } }
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        root.cfg.weatherAutoLocation = !root.cfg.weatherAutoLocation
+                                                        root.cfg.save()
+                                                        root.cfg.refreshWeather()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle { Layout.fillWidth: true; height: 1; color: root.cfg.borderCol; Layout.leftMargin: 14; Layout.rightMargin: 14 }
+
+                                    // 2. Город прогноза (ручной ввод или инфо)
+                                    Item {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 46
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 16
+                                            anchors.rightMargin: 14
+
+                                            Text {
+                                                text: root.cfg.weatherAutoLocation ? "Текущий город:" : "Город прогноза:"
+                                                color: root.cfg.textPrimary
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                                Layout.preferredWidth: 160
+                                            }
+
+                                            // Если автоопределение включено — показываем бейдж и кнопку обновления
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+                                                visible: root.cfg.weatherAutoLocation
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    height: 28
+                                                    radius: 14
+                                                    color: root.cfg.bgSurface
+                                                    border.color: root.cfg.borderCol
+                                                    border.width: 1
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 10
+                                                        anchors.rightMargin: 10
+                                                        spacing: 6
+                                                        Text { text: "📍"; font.pixelSize: 11 }
+                                                        Text {
+                                                            text: root.cfg.weatherCity + " (" + root.cfg.weatherText + ", " + root.cfg.weatherDesc + ")"
+                                                            color: root.cfg.textPrimary
+                                                            font.pixelSize: 11
+                                                            font.bold: true
+                                                            Layout.fillWidth: true
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    height: 28
+                                                    implicitWidth: 32
+                                                    radius: 14
+                                                    color: refM.containsMouse ? root.cfg.accent : root.cfg.bgSurface
+                                                    border.color: root.cfg.borderCol
+                                                    border.width: 1
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "󰑐"
+                                                        color: refM.containsMouse ? root.cfg.accentText : root.cfg.accent
+                                                        font.pixelSize: 13
+                                                    }
+                                                    MouseArea {
+                                                        id: refM
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.cfg.refreshWeather()
+                                                    }
+                                                }
+                                            }
+
+                                            // Если выключено — поле ручного ввода
                                             Rectangle {
                                                 Layout.fillWidth: true; Layout.preferredHeight: 28; radius: 6
                                                 color: root.cfg.bgSurface
                                                 border.color: cityInp.activeFocus ? root.cfg.accent : root.cfg.borderCol
                                                 border.width: 1
+                                                visible: !root.cfg.weatherAutoLocation
 
                                                 TextInput {
                                                     id: cityInp

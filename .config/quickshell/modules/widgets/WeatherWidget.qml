@@ -229,7 +229,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "Ясно • Ощущается как " + root.cfg.weatherText
+                    text: (root.cfg.weatherDesc || "Ясно") + " • Ощущается как " + root.cfg.weatherText
                     color: root.cfg.onSurfaceVariant
                     font.pixelSize: 10
                     font.family: root.cfg.fontFamily

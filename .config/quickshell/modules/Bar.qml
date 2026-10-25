@@ -198,8 +198,30 @@ Item {
 
     Process {
         id: weatherProc
-        command: ["sh", "-c", "curl -s 'wttr.in/" + root.cfg.weatherCity + "?format=%t' | tr -d '+' || echo '—'"]
-        stdout: SplitParser { onRead: data => { if (data.trim() !== "") root.cfg.weatherText = data.trim() } }
+        running: true
+        command: root.cfg.weatherAutoLocation
+                 ? ["python3", root.cfg.qsDir + "/scripts/weather.py", "--auto"]
+                 : ["python3", root.cfg.qsDir + "/scripts/weather.py", "--city", root.cfg.weatherCity]
+        stdout: SplitParser {
+            onRead: data => {
+                let line = data.trim()
+                if (!line || line === "") return
+                try {
+                    let j = JSON.parse(line)
+                    if (j.temp) root.cfg.weatherText = j.temp
+                    if (j.city) root.cfg.weatherCity = j.city
+                    if (j.desc) root.cfg.weatherDesc = j.desc
+                    if (j.icon) root.cfg.weatherIcon = j.icon
+                } catch(e) {}
+            }
+        }
+    }
+
+    Connections {
+        target: root.cfg
+        function onRefreshWeather() {
+            weatherProc.running = true
+        }
     }
 
     // Слушатель раскладки клавиатуры
@@ -334,7 +356,7 @@ Item {
                 id: weatherRow
                 anchors.fill: parent
                 spacing: 4
-                Text { text: "󰖐"; color: root.cfg.accent; font.pixelSize: root.iconSize }
+                Text { text: root.cfg.weatherIcon || "󰖐"; color: root.cfg.accent; font.pixelSize: root.iconSize }
                 Text { text: root.cfg.weatherText; color: root.cfg.textPrimary; font.pixelSize: root.fontSizePrimary; font.bold: true }
             }
             MouseArea {
@@ -631,7 +653,7 @@ Item {
         ColumnLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 1
-            Text { Layout.alignment: Qt.AlignHCenter; text: "󰖐"; color: root.cfg.accent; font.pixelSize: 13 }
+            Text { Layout.alignment: Qt.AlignHCenter; text: root.cfg.weatherIcon || "󰖐"; color: root.cfg.accent; font.pixelSize: 13 }
             Text { Layout.alignment: Qt.AlignHCenter; text: root.cfg.weatherText.replace("+", ""); color: root.cfg.textPrimary; font.pixelSize: 9; font.bold: true }
         }
     }

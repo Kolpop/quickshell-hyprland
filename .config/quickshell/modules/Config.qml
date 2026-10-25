@@ -706,7 +706,10 @@ QtObject {
     property bool lockShowGauges: true
     property bool lockShowWeather: true
     property bool lockShowDate: true
-    property string weatherCity: "Tyumen"
+    property bool weatherAutoLocation: true
+    property string weatherCity: "Тюмень"
+    property string weatherDesc: "Ясно"
+    property string weatherIcon: "󰖙"
     property string lockPin: "1234"
 
     // ================= 6. OSD И РЕЖИМЫ =================
@@ -805,6 +808,7 @@ QtObject {
             lockShowGauges: root.lockShowGauges,
             lockShowWeather: root.lockShowWeather,
             lockShowDate: root.lockShowDate,
+            weatherAutoLocation: root.weatherAutoLocation,
             weatherCity: root.weatherCity,
             lockPin: root.lockPin,
             osdVolume: root.osdVolume,
@@ -880,6 +884,7 @@ QtObject {
         if (d.lockShowGauges !== undefined) root.lockShowGauges = d.lockShowGauges
         if (d.lockShowWeather !== undefined) root.lockShowWeather = d.lockShowWeather
         if (d.lockShowDate !== undefined) root.lockShowDate = d.lockShowDate
+        if (d.weatherAutoLocation !== undefined) root.weatherAutoLocation = d.weatherAutoLocation
         if (d.weatherCity !== undefined) root.weatherCity = d.weatherCity
         if (d.lockPin !== undefined) root.lockPin = d.lockPin
         if (d.osdVolume !== undefined) root.osdVolume = d.osdVolume
